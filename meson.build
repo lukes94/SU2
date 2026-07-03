@@ -97,6 +97,39 @@ endif
 
 su2_deps += declare_dependency(include_directories: 'externals/eigen')
 
+# AUGUSTO: fetch the pyMLS spline module from pyBeam for future aerostructural FSI coupling.
+if get_option('enable-augusto')
+  pymls_commit = '78e5f53d22d423414e7282511a88c1318ef82696'
+  pymls_dest   = meson.project_source_root() / 'externals' / 'pyMLS'
+
+  check_pymls = run_command(python, script_path / 'check_dir.py', pymls_dest)
+  if check_pymls.returncode() != 0
+    fetch_pymls = run_command(python,
+                               script_path / 'fetch_pymls.py',
+                               pymls_commit,
+                               pymls_dest,
+                               check: true)
+  else
+    message('pyMLS sources found.')
+  endif
+
+  # Build pyMLS against SU2's own Eigen and swig/python toolchain.
+  eigen_dep  = declare_dependency(include_directories: 'externals/eigen')
+  python_dep = python.dependency(embed: true)
+
+  swig = find_program('swig')
+  swig_gen = generator(
+      swig,
+      output: ['@BASENAME@.cxx'],
+      arguments: [ '-c++', '-python', '-outdir', meson.current_build_dir(), '-o', './@OUTPUT@', '@INPUT@'],
+      depfile: '@BASENAME@.d',
+  )
+
+  subdir('externals/pyMLS/externals/ann')
+  subdir('externals/pyMLS')
+  subdir('externals/pyMLS/pylib')
+endif
+
 if get_option('enable-autodiff') or get_option('enable-directdiff')
   codi_dep = [declare_dependency(include_directories: 'externals/codi/include')]
   codi_rev_args = ['-DCODI_REVERSE_TYPE']

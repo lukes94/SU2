@@ -92,6 +92,9 @@ Mercurial
 ./build/
 build/
 
+# AUGUSTO: pyMLS is fetched from pyBeam at configure time, not vendored
+/externals/pyMLS/
+
 # ninja binary (build system)
 ninja
 

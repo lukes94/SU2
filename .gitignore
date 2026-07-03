@@ -95,6 +95,9 @@ build/
 # AUGUSTO: pyMLS is fetched from pyBeam at configure time, not vendored
 /externals/pyMLS/
 
+# Shape optimization output (SU2_PY/SU2/opt/project.py, DSN_* design iterations)
+DESIGNS/
+
 # ninja binary (build system)
 ninja
 

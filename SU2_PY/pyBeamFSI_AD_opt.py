@@ -42,7 +42,6 @@ import pyMLSInterface as Spline_Module
 
 # imports the CFD (SU2) module for FSI computation
 import pysu2ad as pysu2
-import pyBeam
 import pyAugusto
 
 # -------------------------------------------------------------------

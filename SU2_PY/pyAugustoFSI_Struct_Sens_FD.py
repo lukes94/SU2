@@ -193,7 +193,8 @@ def Sens(options, dvID, perturbed_DV):
     Js = SolidSolver.GetObjFunction() 
 
     # Postprocess the solver and exit cleanly
-    FluidSolver.Postprocessing()
+    #FluidSolver.Postprocessing()
+    FluidSolver.Finalize()
 
     if FluidSolver is not None:
         del FluidSolver

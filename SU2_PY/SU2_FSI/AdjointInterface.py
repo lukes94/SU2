@@ -254,15 +254,18 @@ class AdjointInterface:
         if FluidSolver != None:
             print('Fluid solver is initialized on process {}'.format(myid))
             self.haveFluidSolver = True
-            allInterfaceMarkersTags = FluidSolver.GetAllDeformMeshMarkersTag()
-            allMarkersID = FluidSolver.GetAllBoundaryMarkers()
+            #allInterfaceMarkersTags = FluidSolver.GetAllDeformMeshMarkersTag()
+            #allMarkersID = FluidSolver.GetAllBoundaryMarkers()
+            allInterfaceMarkersTags = FluidSolver.GetDeformableMarkerTags()
+            allMarkersID = FluidSolver.GetMarkerIndices()
             if not allInterfaceMarkersTags:
                 raise Exception('No moving marker was defined in SU2.')
             else:
                 if allInterfaceMarkersTags[0] in allMarkersID.keys():
                     self.fluidInterfaceIdentifier = allMarkersID[allInterfaceMarkersTags[0]]
             if self.fluidInterfaceIdentifier != None:
-                self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberVertices(self.fluidInterfaceIdentifier)
+                #self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberVertices(self.fluidInterfaceIdentifier)
+                self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberMarkerNodes(self.fluidInterfaceIdentifier)
             if self.nLocalFluidInterfaceNodes != 0:
                 self.haveFluidInterface = True
                 print('Number of interface fluid nodes (halo nodes included) on proccess {} and marker {}: {}'\
@@ -323,8 +326,13 @@ class AdjointInterface:
         # --- Calculate the number of halo nodes on each partition
         self.nLocalFluidInterfaceHaloNode = 0
         for iVertex in range(self.nLocalFluidInterfaceNodes):
-            if FluidSolver.IsAHaloNode(self.fluidInterfaceIdentifier, iVertex) == True:
-                GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
+            #if FluidSolver.IsAHaloNode(self.fluidInterfaceIdentifier, iVertex) == True:
+            #    GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
+            #    self.FluidHaloNodeList[GlobalIndex] = iVertex
+            #    self.nLocalFluidInterfaceHaloNode += 1
+            iPoint = FluidSolver.GetMarkerNode(self.fluidInterfaceIdentifier, iVertex)
+            if not FluidSolver.GetNodeDomain(iPoint):
+                GlobalIndex = FluidSolver.GetNodeGlobalIndex(iPoint)
                 self.FluidHaloNodeList[GlobalIndex] = iVertex
                 self.nLocalFluidInterfaceHaloNode += 1
 
@@ -403,9 +411,12 @@ class AdjointInterface:
         localFluidInterface_array_Z_init = np.zeros(self.nLocalFluidInterfacePhysicalNodes)
         localGlobalIndex_array           = np.zeros(self.nLocalFluidInterfacePhysicalNodes)
 
+        fluidInterfaceInitialCoords = FluidSolver.MarkerInitialCoordinates(self.fluidInterfaceIdentifier)
         for iVertex in range(self.nLocalFluidInterfaceNodes):
-            GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
-            posx, posy, posz = FluidSolver.GetVertex_UndeformedCoord(self.fluidInterfaceIdentifier, iVertex)
+            #GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
+            #posx, posy, posz = FluidSolver.GetVertex_UndeformedCoord(self.fluidInterfaceIdentifier, iVertex)
+            GlobalIndex = FluidSolver.GetNodeGlobalIndex(FluidSolver.GetMarkerNode(self.fluidInterfaceIdentifier, iVertex))
+            posx, posy, posz = fluidInterfaceInitialCoords.Get(iVertex)
             #print("Global index = {}".format(GlobalIndex))
             #print("Undeformed coordinates = {} {} {} ".format(posx, posy, posz))
 
@@ -524,7 +535,8 @@ class AdjointInterface:
         # For the vertices that belong to the interface
         for iVertex in self.localFluidInterface_vertex_indices:
             # Compute the vertex forces on the fluid solver
-            loadX, loadY, loadZ = FluidSolver.GetFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
+            #loadX, loadY, loadZ = FluidSolver.GetFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
+            loadX, loadY, loadZ = FluidSolver.GetMarkerFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
             # Store them in the local load array
             localFluidLoadX[localIndex] = loadX
             localFluidLoadY[localIndex] = loadY
@@ -669,8 +681,9 @@ class AdjointInterface:
         # For the vertices that belong to the interface
         for iVertex in self.localFluidInterface_vertex_indices:
             # Compute the vertex forces on the fluid solver
-            FluidSolver.ComputeVertexForces(self.fluidInterfaceIdentifier, int(iVertex))
-            sensX, sensY, sensZ = FluidSolver.GetMeshDisp_Sensitivity(self.fluidInterfaceIdentifier, int(iVertex))
+            #FluidSolver.ComputeVertexForces(self.fluidInterfaceIdentifier, int(iVertex))
+            #sensX, sensY, sensZ = FluidSolver.GetMeshDisp_Sensitivity(self.fluidInterfaceIdentifier, int(iVertex))
+            sensX, sensY, sensZ = FluidSolver.GetMarkerDisplacementSensitivity(self.fluidInterfaceIdentifier, int(iVertex))
             # Store them in the local load array
             localDispFlowAdjointX[localIndex] = sensX
             localDispFlowAdjointY[localIndex] = sensY
@@ -849,10 +862,14 @@ class AdjointInterface:
         localIndex = 0
         for iVertex in self.localFluidInterface_vertex_indices:
             # Store them in the mesh displacement routine
-            FluidSolver.SetFlowLoad_Adjoint(self.fluidInterfaceIdentifier, int(iVertex),
-                                            localFluidLoadSensX[localIndex],
+            #FluidSolver.SetFlowLoad_Adjoint(self.fluidInterfaceIdentifier, int(iVertex),
+            #                                localFluidLoadSensX[localIndex],
+            #                                localFluidLoadSensY[localIndex],
+            #                                localFluidLoadSensZ[localIndex])
+            FluidSolver.SetMarkerCustomFlowLoadAdjoint(self.fluidInterfaceIdentifier, int(iVertex),
+                                            [localFluidLoadSensX[localIndex],
                                             localFluidLoadSensY[localIndex],
-                                            localFluidLoadSensZ[localIndex])
+                                            localFluidLoadSensZ[localIndex]])
             # Increment the local index
             localIndex += 1
 
@@ -909,8 +926,9 @@ class AdjointInterface:
             # --- Fluid solver call for FSI subiteration --- #
             self.MPIPrint('\n##### Launching fluid solver for a steady computation\n')
             self.MPIBarrier()
-            FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
-            FluidSolver.MainRecording()        # Run the recording of the main variables            
+            #FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
+            #FluidSolver.MainRecording()        # Run the recording of the main variables
+            FluidSolver.Preprocess(0)          # Triggers MainRecording() internally (RecordingState != MainVariables after Postprocess)
             FluidSolver.Run()                  # Run one time-step (static: one simulation)
             FluidSolver.Postprocess()          # Run the recording of the geometrical variables                   
             FluidSolver.Update()               # Update the solver for the next time iteration

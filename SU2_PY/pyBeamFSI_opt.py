@@ -103,7 +103,7 @@ def main():
         FluidSolver = pysu2.CSinglezoneDriver(CFD_ConFile, 1, comm)
     except TypeError as exception:
         print('A TypeError occured in pysu2.CSingleZoneDriver : ', exception)
-        if serial:
+        if options.serial:
             print('ERROR : You are trying to launch a computation without initializing MPI but the wrapper has been built in parallel. Please remove the --serial option that is incompatible with a parallel build.')
         else:
             print('ERROR : You are trying to initialize MPI with a serial build of the wrapper. Please, add --serial to launch your simulation.')
@@ -196,7 +196,8 @@ def main():
        obj_file.close()
        
     # Postprocess the solver and exit cleanly
-    FluidSolver.Postprocessing()
+    #FluidSolver.Postprocessing()
+    FluidSolver.Finalize()
 
     if FluidSolver is not None:
         del FluidSolver

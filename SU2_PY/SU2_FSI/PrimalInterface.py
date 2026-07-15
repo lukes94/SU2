@@ -237,15 +237,18 @@ class Interface:
         if FluidSolver != None:
             print('Fluid solver is initialized on process {}'.format(myid))
             self.haveFluidSolver = True
-            allInterfaceMarkersTags = FluidSolver.GetAllDeformMeshMarkersTag()
-            allMarkersID = FluidSolver.GetAllBoundaryMarkers()
+            #allInterfaceMarkersTags = FluidSolver.GetAllDeformMeshMarkersTag()
+            #allMarkersID = FluidSolver.GetAllBoundaryMarkers()
+            allInterfaceMarkersTags = FluidSolver.GetDeformableMarkerTags()
+            allMarkersID = FluidSolver.GetMarkerIndices()
             if not allInterfaceMarkersTags:
                 raise Exception('No moving marker was defined in SU2.')
             else:
                 if allInterfaceMarkersTags[0] in allMarkersID.keys():
                     self.fluidInterfaceIdentifier = allMarkersID[allInterfaceMarkersTags[0]]
             if self.fluidInterfaceIdentifier != None:
-                self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberVertices(self.fluidInterfaceIdentifier)
+                #self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberVertices(self.fluidInterfaceIdentifier)
+                self.nLocalFluidInterfaceNodes = FluidSolver.GetNumberMarkerNodes(self.fluidInterfaceIdentifier)
             if self.nLocalFluidInterfaceNodes != 0:
                 self.haveFluidInterface = True
                 print('Number of interface fluid nodes (halo nodes included) on proccess {} and marker {}: {}'\
@@ -304,8 +307,13 @@ class Interface:
         # --- Calculate the number of halo nodes on each partition
         self.nLocalFluidInterfaceHaloNode = 0
         for iVertex in range(self.nLocalFluidInterfaceNodes):
-            if FluidSolver.IsAHaloNode(self.fluidInterfaceIdentifier, iVertex) == True:
-                GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
+            #if FluidSolver.IsAHaloNode(self.fluidInterfaceIdentifier, iVertex) == True:
+            #    GlobalIndex = FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex)
+            #    self.FluidHaloNodeList[GlobalIndex] = iVertex
+            #    self.nLocalFluidInterfaceHaloNode += 1
+            iPoint = FluidSolver.GetMarkerNode(self.fluidInterfaceIdentifier, iVertex)
+            if not FluidSolver.GetNodeDomain(iPoint):
+                GlobalIndex = FluidSolver.GetNodeGlobalIndex(iPoint)
                 self.FluidHaloNodeList[GlobalIndex] = iVertex
                 self.nLocalFluidInterfaceHaloNode += 1
 
@@ -384,9 +392,12 @@ class Interface:
         localFluidInterface_array_Z_init = np.zeros(self.nLocalFluidInterfacePhysicalNodes)
         localGlobalIndex_array           = np.zeros(self.nLocalFluidInterfacePhysicalNodes)
 
+        fluidInterfaceInitialCoords = FluidSolver.MarkerInitialCoordinates(self.fluidInterfaceIdentifier)
         for iVertex in range(self.nLocalFluidInterfaceNodes):
-            GlobalIndex = int(FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex))
-            posx, posy, posz = FluidSolver.GetVertex_UndeformedCoord(self.fluidInterfaceIdentifier, iVertex)
+            #GlobalIndex = int(FluidSolver.GetVertexGlobalIndex(self.fluidInterfaceIdentifier, iVertex))
+            #posx, posy, posz = FluidSolver.GetVertex_UndeformedCoord(self.fluidInterfaceIdentifier, iVertex)
+            GlobalIndex = int(FluidSolver.GetNodeGlobalIndex(FluidSolver.GetMarkerNode(self.fluidInterfaceIdentifier, iVertex)))
+            posx, posy, posz = fluidInterfaceInitialCoords.Get(iVertex)
             #print("Global index = {}".format(GlobalIndex))
             #print("Undeformed coordinates = {} {} {} ".format(posx, posy, posz))
 
@@ -516,7 +527,8 @@ class Interface:
         # For the vertices that belong to the interface
         for iVertex in self.localFluidInterface_vertex_indices:
             # Compute the vertex forces on the fluid solver
-            loadX, loadY, loadZ = FluidSolver.GetFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
+            #loadX, loadY, loadZ = FluidSolver.GetFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
+            loadX, loadY, loadZ = FluidSolver.GetMarkerFlowLoad(self.fluidInterfaceIdentifier, int(iVertex))
             # Store them in the local load array
             localFluidLoadX[localIndex] = loadX
             localFluidLoadY[localIndex] = loadY
@@ -775,8 +787,10 @@ class Interface:
         localIndex = 0
         for iVertex in self.localFluidInterface_vertex_indices:
             # Store them in the mesh displacement routine
-            FluidSolver.SetMeshDisplacement(self.fluidInterfaceIdentifier, int(iVertex), localFluidDispX[localIndex],
-                                            localFluidDispY[localIndex], localFluidDispZ[localIndex])
+            #FluidSolver.SetMeshDisplacement(self.fluidInterfaceIdentifier, int(iVertex), localFluidDispX[localIndex],
+            #                                localFluidDispY[localIndex], localFluidDispZ[localIndex])
+            FluidSolver.SetMarkerCustomDisplacement(self.fluidInterfaceIdentifier, int(iVertex),
+                                            [localFluidDispX[localIndex], localFluidDispY[localIndex], localFluidDispZ[localIndex]])
             # Increment the local index
             localIndex += 1
 
@@ -845,7 +859,7 @@ class Interface:
             # --- Fluid solver call for FSI subiteration --- #
             self.MPIPrint('\n##### Launching fluid solver for a steady computation\n')
             self.MPIBarrier()
-            FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
+            #FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
             FluidSolver.Preprocess(0)          # Time iteration pre-processing
             ## Mesh time
             if myid is 0:
@@ -896,8 +910,10 @@ class Interface:
                     shutil.move("surface_flow.vtu", new_name_surf)
 
                 hist_file = open("historyFSI.dat", "a")
-                hist_file.write(str(FluidSolver.Get_DragCoeff()) + "\t")
-                hist_file.write(str(FluidSolver.Get_LiftCoeff()) + "\n")
+                #hist_file.write(str(FluidSolver.Get_DragCoeff()) + "\t")
+                #hist_file.write(str(FluidSolver.Get_LiftCoeff()) + "\n")
+                hist_file.write(str(FluidSolver.GetOutputValue("DRAG")) + "\t")
+                hist_file.write(str(FluidSolver.GetOutputValue("LIFT")) + "\n")
                 hist_file.close()
 
             if pyBeam_success == False:
@@ -913,15 +929,18 @@ class Interface:
         if pyBeam_success != False:        
                 
            # --- Extract drag and lift in case fixed CL mode and doing finite differences on AoA
-           cl = FluidSolver.Get_LiftCoeff()
-           cd = FluidSolver.Get_DragCoeff()
+           #cl = FluidSolver.Get_LiftCoeff()
+           #cd = FluidSolver.Get_DragCoeff()
+           cl = FluidSolver.GetOutputValue("LIFT")
+           cd = FluidSolver.GetOutputValue("DRAG")
         
            # --- Fluid solver call for FSI subiteration --- #
            if self.fixedClMode == 'YES':
               self.MPIPrint('\n##### If fixed Cl mode, performing extra CFD to calculate with FD the derivative of Cl with respect to AoA\n')
               self.MPIPrint('\n##### Launching fluid solver for a steady computation\n')
-              FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
-              FluidSolver.Preprocess(0,500)          # Time iteration pre-processing
+              #FluidSolver.ResetConvergence()     # Make sure the solver starts convergence from 0
+              #FluidSolver.Preprocess(0,500)          # Time iteration pre-processing
+              FluidSolver.Preprocess(0)          # Time iteration pre-processing
               FluidSolver.Run()                  # Run one time-step (static: one simulation)
               FluidSolver.Postprocess()          # Run one time-step (static: one simulation)
               FluidSolver.Update()               # Update the solver for the next time iteration
@@ -938,7 +957,8 @@ class Interface:
         else:
            # if pyBeam diverges probably within the optimization configuration the guess is wrong
            # so the code exits and to the obj function (cd) a trivial high value is assigned 
-           cl = FluidSolver.Get_LiftCoeff()
+           #cl = FluidSolver.Get_LiftCoeff()
+           cl = FluidSolver.GetOutputValue("LIFT")
            cd = 100
         
         return cl, cd
